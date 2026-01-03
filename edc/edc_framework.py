@@ -52,11 +52,13 @@ class EDC:
 
         self.sr_embedder_name = edc_configuration["sr_embedder"]
 
-    # Multi-stage relation retrieval (BM25 -> bi-encoder -> cross-encoder)
-    self.sr_use_bm25 = edc_configuration.get("sr_use_bm25", True)
-    self.sr_bm25_top_k = edc_configuration.get("sr_bm25_top_k", 200)
-    self.sr_cross_encoder = edc_configuration.get("sr_cross_encoder", None)
-    self.sr_cross_top_k = edc_configuration.get("sr_cross_top_k", 20)
+        # Multi-stage relation retrieval (BM25 -> bi-encoder -> cross-encoder)
+        self.sr_use_bm25 = edc_configuration.get("sr_use_bm25", True)
+        self.sr_bm25_top_k = edc_configuration.get("sr_bm25_top_k", 200)
+        self.sr_cross_encoder = edc_configuration.get("sr_cross_encoder", None)
+        self.sr_cross_top_k = edc_configuration.get("sr_cross_top_k", 20)
+
+        # Refined OIE prompt settings
         self.oie_r_prompt_template_file_path = edc_configuration["oie_refine_prompt_template_file_path"]
         self.oie_r_few_shot_example_file_path = edc_configuration["oie_refine_few_shot_example_file_path"]
 
