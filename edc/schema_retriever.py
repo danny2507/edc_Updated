@@ -88,6 +88,7 @@ class SchemaRetriever:
         query_input_text: str,
         top_k: int = 10,
         bm25_query: Optional[str] = None,
+        cross_query: Optional[str] = None,
     ):
         # --- Stage 1: BM25 prefilter by relation name ---
         candidate_relations = list(self.target_schema_embedding_dict.keys())
@@ -128,7 +129,8 @@ class SchemaRetriever:
 
         ce_k = min(self.cross_top_k, len(bi_top_relations)) if self.cross_top_k else len(bi_top_relations)
         ce_candidates_text = [relation_to_text(r, self.target_schema_dict.get(r)) for r in bi_top_relations[:ce_k]]
-        reranked = self.cross_encoder.rerank(query=query_input_text, candidates=ce_candidates_text, top_k=ce_k)
+        ce_query = cross_query if cross_query is not None else query_input_text
+        reranked = self.cross_encoder.rerank(query=ce_query, candidates=ce_candidates_text, top_k=ce_k)
 
         # reranked indices are relative to the truncated ce_candidates_text
         reranked_relations = [bi_top_relations[i] for (i, _score) in reranked]

@@ -380,7 +380,15 @@ class EDC:
             # Obtain candidate relations
             hint_relations = previous_relations
 
-            retrieved_relations = schema_retriever.retrieve_relevant_relations(input_text_str)
+            # Use the open relation string (often short and schema-like) for lexical/cross-encoder scoring.
+            # Keep the bi-encoder query as the full input text by default.
+            bm25_query = " ".join(previous_relations) if previous_relations else None
+            cross_query = bm25_query
+            retrieved_relations = schema_retriever.retrieve_relevant_relations(
+                input_text_str,
+                bm25_query=bm25_query,
+                cross_query=cross_query,
+            )
 
             counter = 0
 
