@@ -11,6 +11,8 @@ from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
 import logging
 
+from edc.utils.relation_text import relation_to_text
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,8 +42,22 @@ class SchemaCanonicalizer:
 
         print("Embedding target schema...")
         for relation, relation_definition in tqdm(target_schema_dict.items()):
-            embedding = self.embedder.encode(relation_definition)
+            embedding = self.embedder.encode(relation_to_text(relation, relation_definition))
             self.schema_embedding_dict[relation] = embedding
+
+    @staticmethod
+    def _fallback_definition(input_text_str: str, open_triplet):
+        subject = open_triplet[0] if len(open_triplet) > 0 else "subject"
+        relation = open_triplet[1] if len(open_triplet) > 1 else "relation"
+        obj = open_triplet[2] if len(open_triplet) > 2 else "object"
+        sanitized_text = re.sub(r"\s+", " ", input_text_str or "").strip()
+        if len(sanitized_text) > 180:
+            sanitized_text = sanitized_text[:179].rstrip() + "…"
+        context_clause = f" in the sentence \"{sanitized_text}\"" if sanitized_text else ""
+        return (
+            f"The relation '{relation}' conveys that '{subject}' {relation} '{obj}'{context_clause}. "
+            f"It captures how {subject} relates to {obj} within the given context."
+        )
 
     def retrieve_similar_relations(self, query_relation_definition: str, top_k=5):
         target_relation_list = list(self.schema_embedding_dict.keys())
@@ -121,6 +137,18 @@ class SchemaCanonicalizer:
     ):
 
         open_relation = open_triplet[1]
+        relation_definition = None
+        if open_relation_definition_dict is not None:
+            relation_definition = open_relation_definition_dict.get(open_relation)
+        if relation_definition in (None, ""):
+            relation_definition = self._fallback_definition(input_text_str, open_triplet)
+            if open_relation_definition_dict is not None:
+                open_relation_definition_dict[open_relation] = relation_definition
+            logger.warning(
+                "Definition missing for relation '%s'. Auto-generated definition: %s",
+                open_relation,
+                relation_definition,
+            )
 
         if open_relation in self.schema_dict:
             # The relation is already canonical
@@ -131,35 +159,30 @@ class SchemaCanonicalizer:
 
         candidate_relations = []
         candidate_scores = []
+        canonicalized_triplet = None
 
-        if len(self.schema_dict) != 0:
-            if open_relation not in open_relation_definition_dict:
-                canonicalized_triplet = None
-            else:
-                candidate_relations, candidate_scores = self.retrieve_similar_relations(
-                    open_relation_definition_dict[open_relation]
-                )
-                canonicalized_triplet = self.llm_verify(
-                    input_text_str,
-                    open_triplet,
-                    open_relation_definition_dict[open_relation],
-                    verify_prompt_template,
-                    candidate_relations,
-                    None,
-                )
-        else:
-            canonicalized_triplet = None
+        if len(self.schema_dict) != 0 and relation_definition not in (None, ""):
+            candidate_relations, candidate_scores = self.retrieve_similar_relations(relation_definition)
+            canonicalized_triplet = self.llm_verify(
+                input_text_str,
+                open_triplet,
+                relation_definition,
+                verify_prompt_template,
+                candidate_relations,
+                None,
+            )
 
         if canonicalized_triplet is None:
             # Cannot be canonicalized
             if enrich:
-                self.schema_dict[open_relation] = open_relation_definition_dict[open_relation]
+                self.schema_dict[open_relation] = relation_definition
                 if "sts_query" in self.embedder.prompts:
                     embedding = self.embedder.encode(
-                        open_relation_definition_dict[open_relation], prompt_name="sts_query"
+                        relation_to_text(open_relation, relation_definition),
+                        prompt_name="sts_query",
                     )
                 else:
-                    embedding = self.embedder.encode(open_relation_definition_dict[open_relation])
+                    embedding = self.embedder.encode(relation_to_text(open_relation, relation_definition))
                 self.schema_embedding_dict[open_relation] = embedding
                 canonicalized_triplet = open_triplet
         return canonicalized_triplet, dict(zip(candidate_relations, candidate_scores))

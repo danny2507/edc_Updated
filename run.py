@@ -57,6 +57,35 @@ if __name__ == "__main__":
     parser.add_argument(
         "--sr_embedder", default="intfloat/e5-mistral-7b-instruct", help="Embedding model used for schema retriever. Has to be a sentence transformer. Please refer to https://sbert.net/"
     )
+
+    # Multi-stage relation retrieval knobs (used in refinement)
+    parser.add_argument(
+        "--sr_use_bm25",
+        action="store_true",
+        help="Enable a BM25 prefilter over relation names before bi-encoder retrieval.",
+    )
+    parser.add_argument(
+        "--no_sr_bm25",
+        action="store_true",
+        help="Disable the BM25 prefilter stage.",
+    )
+    parser.add_argument(
+        "--sr_bm25_top_k",
+        default=200,
+        type=int,
+        help="How many relations to keep after BM25 prefilter for the bi-encoder stage.",
+    )
+    parser.add_argument(
+        "--sr_cross_encoder",
+        default=None,
+        help="Optional cross-encoder model name (sentence-transformers CrossEncoder) for final reranking.",
+    )
+    parser.add_argument(
+        "--sr_cross_top_k",
+        default=20,
+        type=int,
+        help="How many bi-encoder candidates to rerank with the cross-encoder.",
+    )
     parser.add_argument(
         "--oie_refine_prompt_template_file_path",
         default="./prompt_templates/oie_r_template.txt",
@@ -111,6 +140,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     args = vars(args)
+
+    # Default behavior: BM25 prefilter enabled unless explicitly disabled.
+    # If user passed --sr_use_bm25, keep it enabled as well.
+    args["sr_use_bm25"] = bool(args.get("sr_use_bm25") or (not args.get("no_sr_bm25", False)))
+    args.pop("no_sr_bm25", None)
     edc = EDC(**args)
     
 

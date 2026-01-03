@@ -26,7 +26,19 @@ Our experiments with both automatic and human evaluation demonstrate that EDC ac
 
 ## Iterative Refinement with Schema Retriever
 
-EDC can be iteratively refined with **Schema Retriever**, which is trained in the same fashion as information retriever. It is able to retrieve schema components relevant to the input text. It is able to extract those more obscure schema components harder to identify on the surface. The retrived content, together with entities extracted with *Entity Extraction* and the entities and relations extracted from last run, together form a hint to enhance the performance of open information extraction. To train the **Schema Retriever**, download the TEKGEN dataset from [link](https://storage.googleapis.com/gresearch/kelm-corpus/updated-2021/quadruples-test.tsv) and run
+EDC can be iteratively refined with **Schema Retriever**, which is trained in the same fashion as information retriever. It is able to retrieve schema components relevant to the input text. It is able to extract those more obscure schema components harder to identify on the surface. The retrived content, together with entities extracted with *Entity Extraction* and the entities and relations extracted from last run, together form a hint to enhance the performance of open information extraction.
+
+### Multi-stage relation filtering (BM25 → bi-encoder → cross-encoder)
+
+In this codebase, the schema retriever now supports a **3-stage candidate pipeline**:
+
+1. **BM25 prefilter** over *relation names* (lexical match) to shrink the candidate pool.
+2. **Bi-encoder** dense retrieval as usual (dot-product similarity) using text built from **relation name + relation definition**.
+3. **Cross-encoder reranking** (optional) on the bi-encoder shortlist.
+
+This pipeline is used for refinement hints (see `EDC.construct_refinement_hint`).
+
+To train the **Schema Retriever**, download the TEKGEN dataset from [link](https://storage.googleapis.com/gresearch/kelm-corpus/updated-2021/quadruples-test.tsv) and run
 
 ```
 python collect_schema_retrieval_data.py \
@@ -88,6 +100,15 @@ To apply iterative refinement, first train the schema retriever as aforementione
 --ee_llm gpt-3.5-turbo \
 --ee_few_shot_example_file_path ./few_shot_examples/{dataset}/ee_few_shot_examples.txt \
 --refinement_iterations N \
+```
+
+Optional knobs for the multi-stage retriever:
+
+```
+--sr_bm25_top_k 200            # how many candidates survive BM25 before the bi-encoder
+--no_sr_bm25                   # disable BM25 prefilter
+--sr_cross_encoder <model>     # enable cross-encoder reranking (e.g., cross-encoder/ms-marco-MiniLM-L-6-v2)
+--sr_cross_top_k 20            # how many bi-encoder candidates to rerank with the cross-encoder
 ```
 
 where `oie_llm` can take value from `gpt-3.5-turbo`, `gpt-4` and `mistralai/Mistral-7B-Instruct-v0.2` (you may use other OpenAI models or other transformers models, but they were not tested) and `dataset` can take value from `webnlg`, `rebel` and `wiki-nre`. `sc_embedder` is by default `intfloat/e5-mistral-7b-instruct`. You may use any sentence transformer of you choice (please refer to https://sbert.net/) but they are not tested. Similarly, for refinement, you can pass the path to the finetuned model using `sr_adapter_path` or any sentence transformer using `sr_embedder`. It is to be noted the default embedders used for schema canonicalization and refinement demand significant compute (7B), you may consider using smaller models or even finetune on top of them if your compute is limited (and the LLMs for prompting as well).
